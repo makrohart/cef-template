@@ -191,51 +191,12 @@ int RunMain(HINSTANCE hInstance,
     return CefGetExitCode();
   }
 
-  // Configure URL based on build mode
-  std::string initial_url;
-#ifdef _DEBUG
-  // Debug mode: use localhost
-  initial_url = "http://localhost:5173/";
-#else
-  // Release mode: use file:// protocol
-  // Get executable directory and build dist path
-  std::string exe_dir;
-#ifdef _WIN32
-  char szPath[MAX_PATH];
-  if (GetModuleFileNameA(nullptr, szPath, MAX_PATH) != 0) {
-    std::filesystem::path exePath(szPath);
-    exe_dir = exePath.parent_path().string();
-  }
-#else
-  char szPath[PATH_MAX];
-  ssize_t count = readlink("/proc/self/exe", szPath, PATH_MAX);
-  if (count != -1) {
-    szPath[count] = '\0';
-    std::filesystem::path exePath(szPath);
-    exe_dir = exePath.parent_path().string();
-  }
-#endif
-  
-  // Build dist/index.html path
-  std::filesystem::path dist_path(exe_dir);
-  dist_path /= "dist";
-  dist_path /= "index.html";
-  
-  // Convert to file:// URL
-  std::string file_path = dist_path.string();
-  // Replace backslashes with forward slashes for URL
-  std::replace(file_path.begin(), file_path.end(), '\\', '/');
-  // Add file:// prefix
-  initial_url = "file:///" + file_path;
-#endif
-
   auto window_config = std::make_unique<RootWindowConfig>();
   window_config->always_on_top =
       command_line->HasSwitch(switches::kAlwaysOnTop);
   window_config->with_osr =
       settings.windowless_rendering_enabled ? true : false;
   window_config->with_controls = false;  // 隐藏URL栏等浏览器界面，只显示HTML内容
-  window_config->url = initial_url;
   // Create the first window.
   context->GetRootWindowManager()->CreateRootWindow(std::move(window_config));
 

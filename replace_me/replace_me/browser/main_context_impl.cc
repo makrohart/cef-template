@@ -11,13 +11,14 @@
 #include "replace_me/browser/client_app_browser.h"
 #include "replace_me/common/client_switches.h"
 #include "replace_me/common/string_util.h"
+#include <filesystem>
 
 namespace client {
 
 namespace {
 
 // The default URL to load in a browser window.
-const char kDefaultUrl[] = "https://www.google.com";
+const std::string kDefaultUrl = "http://localhost:5173/";
 
 // Returns the ARGB value for |color|.
 cef_color_t ParseColor(const std::string& color) {
@@ -153,7 +154,18 @@ std::string MainContextImpl::GetMainURL(
     command_line = command_line_;
   }
 
+#ifdef _DEBUG
+  // Debug mode: use localhost
   std::string main_url = kDefaultUrl;
+#else
+  // Build dist/index.html path
+  std::filesystem::path dist_path(GetAppWorkingDirectory());
+  dist_path /= "dist";
+  dist_path /= "index.html";
+  // Add file:// prefix
+  std::string main_url = "file:///" + dist_path.string();
+#endif
+  
   if (command_line->HasSwitch(switches::kUrl)) {
     main_url = command_line->GetSwitchValue(switches::kUrl);
   } else if (use_views_ && command_line->HasSwitch(switches::kHideFrame)) {
