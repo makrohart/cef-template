@@ -12,6 +12,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_message_router.h"
 #include "progress_message_router_render_side.h"
+#include "replace_me/renderer/event_router_render_side.h"
 
 namespace client::renderer {
 
@@ -36,17 +37,19 @@ namespace client::renderer {
         }
 
         // Create the renderer-side router for query handling.
-        CefMessageRouterConfig config;
-        // message_router_ = CefMessageRouterRendererSide::Create(config);
-        message_router_ = ProgressMessageRouterRendererSide::Create(config);
+        // message_routers_.insert(CefMessageRouterRenderSide::Create(CefMessageRouterConfig{}));
+        message_routers_.insert(ProgressMessageRouterRendererSide::Create(CefMessageRouterConfig{}));
+        message_routers_.insert(EventRouterRenderSide::Create(CefEventRouterConfig{}));
     }
     void ClientAppRenderDelegate::OnContextCreated(CefRefPtr<ClientAppRenderer> app, CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
     {
-        message_router_->OnContextCreated(browser, frame, context);
+        for (auto& message_router : message_routers_)
+            message_router->OnContextCreated(browser, frame, context);
     }
     void ClientAppRenderDelegate::OnContextReleased(CefRefPtr<ClientAppRenderer> app, CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
     {
-        message_router_->OnContextReleased(browser, frame, context);
+        for (auto& message_router : message_routers_)
+            message_router->OnContextReleased(browser, frame, context);
     }
     void ClientAppRenderDelegate::OnFocusedNodeChanged(CefRefPtr<ClientAppRenderer> app, CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefDOMNode> node)
     {
@@ -62,8 +65,16 @@ namespace client::renderer {
     }
     bool ClientAppRenderDelegate::OnProcessMessageReceived(CefRefPtr<ClientAppRenderer> app, CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefProcessId source_process, CefRefPtr<CefProcessMessage> message)
     {
-        return message_router_->OnProcessMessageReceived(browser, frame,
-            source_process, message);
+        // Try message router first.
+        for (auto& message_router : message_routers_)
+        {
+            if (message_router->OnProcessMessageReceived(browser, frame, source_process, message))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 	// namespace
 }  // namespace client::renderer

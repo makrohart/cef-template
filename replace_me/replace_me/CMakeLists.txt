@@ -66,6 +66,8 @@ set(REPLACE_ME_BROWSER_BROWSER_SRCS
   browser/main_message_loop_external_pump.h
   browser/main_message_loop_std.cc
   browser/main_message_loop_std.h
+  browser/event_router_browser_side.h
+  browser/event_router_browser_side.cc
   )
 source_group(replace_me\\\\browser FILES ${REPLACE_ME_BROWSER_BROWSER_SRCS})
 
@@ -121,6 +123,8 @@ set(REPLACE_ME_RENDERER_SRCS
   renderer/client_app_renderer_delegate.h
   renderer/progress_message_router_render_side.h
   renderer/progress_message_router_render_side.cpp
+  renderer/event_router_render_side.h
+  renderer/event_router_render_side.cc
   )
 source_group(replace_me\\\\renderer FILES ${REPLACE_ME_RENDERER_SRCS})
 

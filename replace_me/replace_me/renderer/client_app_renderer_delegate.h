@@ -43,7 +43,7 @@ namespace client::renderer {
         bool last_node_is_editable_ = false;
 
         // Handles the renderer side of query routing.
-        CefRefPtr<CefMessageRouterRendererSide> message_router_;
+        std::set<CefRefPtr<CefMessageRouterRendererSide>> message_routers_;
 
         DISALLOW_COPY_AND_ASSIGN(ClientAppRenderDelegate);
         IMPLEMENT_REFCOUNTING(ClientAppRenderDelegate);
