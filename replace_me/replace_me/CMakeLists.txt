@@ -112,6 +112,8 @@ set(REPLACE_ME_COMMON_SRCS
   common/resource_util.h
   common/progress_message_router_utils.h
   common/progress_message_router_utils.cpp
+  common/event.h
+  common/event.cpp
   )
 source_group(replace_me\\\\common FILES ${REPLACE_ME_COMMON_SRCS})
 
