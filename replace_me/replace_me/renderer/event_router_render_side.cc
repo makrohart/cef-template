@@ -13,6 +13,7 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 #include "libcef_dll/wrapper/cef_browser_info_map.h"
+#include "../common/event.h"
 
 namespace {
 
@@ -58,7 +59,6 @@ namespace {
             V8HandlerImpl(CefRefPtr<EventRouterRenderSideImpl> router, const CefEventRouterConfig& config)
                 : router_(router)
                 , config_(config)
-                , context_id_(kReservedId)
             {
             }
 
@@ -85,9 +85,9 @@ namespace {
                     CefRefPtr<CefV8Value> handler = arguments[1];
 
                     CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
-                    const int listener_id = router_->RegisterListener(eventName, handler);
+                    const int id_render_side = router_->OnEvent(context->GetBrowser(), context->GetFrame(), eventName, handler);
 
-                    retval = CefV8Value::CreateInt(listener_id);
+                    retval = CefV8Value::CreateInt(id_render_side);
                     return true;
                 }
                 else if (name == config_.js_event_off_function) {
@@ -99,10 +99,10 @@ namespace {
                     }
 
                     const std::string eventName = arguments[0]->GetStringValue();
-                    const int listener_id = arguments[1]->GetIntValue();
+                    const int id_render_side = arguments[1]->GetIntValue();
 
                     CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
-                    router_->UnregisterListener(eventName, listener_id);
+                    router_->OffEvent(context->GetBrowser(), context->GetFrame(), eventName, id_render_side);
 
                     retval = CefV8Value::CreateBool(true);
                     return true;
@@ -119,7 +119,7 @@ namespace {
                     CefRefPtr<CefV8Value> data = arguments[1];
 
                     CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
-                    router_->EmitEvent(context->GetFrame(), eventName, data);
+                    router_->EmitEvent(context->GetBrowser(), context->GetFrame(), /*fromBrowserSide=*/false, eventName, data);
 
                     retval = CefV8Value::CreateBool(true);
                     return true;
@@ -129,17 +129,8 @@ namespace {
             }
 
         private:
-            // Don't create the context ID until it's actually needed.
-            int GetIDForContext(CefRefPtr<CefV8Context> context) {
-                if (context_id_ == kReservedId) {
-                    context_id_ = router_->CreateIDForContext(context);
-                }
-                return context_id_;
-            }
-
             CefRefPtr<EventRouterRenderSideImpl> router_;
             const CefEventRouterConfig config_;
-            int context_id_;
 
             IMPLEMENT_REFCOUNTING(V8HandlerImpl);
         };
@@ -185,24 +176,12 @@ namespace {
             CefRefPtr<CefV8Value> emit_func =
                 CefV8Value::CreateFunction(config_.js_event_emit_function, handler.get());
             window->SetValue(config_.js_event_emit_function, emit_func, attributes);
-
-            // Store context for later use.
-            const int context_id = GetIDForContext(context);
-            context_map_[context_id] = context;
         }
 
         void OnContextReleased(CefRefPtr<CefBrowser> browser,
                                CefRefPtr<CefFrame> frame,
                                CefRefPtr<CefV8Context> context) override {
             CEF_REQUIRE_RENDERER_THREAD();
-
-            // Get the context ID and remove the context from the map.
-            const int context_id = GetIDForContext(context, true);
-            if (context_id != kReservedId) {
-                // Remove all listeners for this context.
-                RemoveListenersForContext(context_id);
-                context_map_.erase(context_id);
-            }
         }
 
         bool OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -211,7 +190,7 @@ namespace {
                                      CefRefPtr<CefProcessMessage> message) override {
             CEF_REQUIRE_RENDERER_THREAD();
 
-            if (message->GetName() != kEventMessageName) {
+            if (message->GetName() != config_.js_event_emit_function) {
                 return false;
             }
 
@@ -221,99 +200,77 @@ namespace {
             }
 
             const std::string event_name = args->GetString(0);
-            const std::string event_data = args->GetString(1);
-
-            CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
-
-            // Parse JSON data if possible.
-            CefRefPtr<CefV8Value> data_value;
-            CefRefPtr<CefV8Value> json = context->GetGlobal()->GetValue("JSON");
-            if (json && json->IsObject()) {
-                CefRefPtr<CefV8Value> parse = json->GetValue("parse");
-                if (parse && parse->IsFunction()) {
-                    CefV8ValueList parse_args;
-                    parse_args.push_back(CefV8Value::CreateString(event_data));
-                    CefRefPtr<CefV8Value> parsed =
-                        parse->ExecuteFunction(json, parse_args);
-                    if (parsed) {
-                        data_value = parsed;
-                    }
-                }
-            }
-            if (!data_value) {
-                data_value = CefV8Value::CreateString(event_data);
-            }
-
-            // Trigger all listeners for this event.
-            TriggerEvent(event_name, data_value);
-
+            const CefRefPtr<CefV8Value> event_data = CefV8Value::CreateString(args->GetString(1));
+            EmitEvent(browser, frame, /*fromBrowserSide=*/true, event_name, event_data);
             return true;
         }
 
     private:
-        int CreateIDForContext(CefRefPtr<CefV8Context> context) {
+
+        int OnEvent(CefRefPtr<CefBrowser> browser,
+                    CefRefPtr<CefFrame> frame,
+                    const std::string& event_name,
+                    CefRefPtr<CefV8Value> handler) {
             CEF_REQUIRE_RENDERER_THREAD();
 
-            // The context should not already have an associated ID.
-            DCHECK_EQ(GetIDForContext(context, false), kReservedId);
+            CefRefPtr<CefV8Context> context = CefV8Context::GetCurrentContext();
 
-            const int context_id = context_id_generator_.GetNextId();
-            context_map_.insert(std::make_pair(context_id, context));
-            return context_id;
+            const int id_render_side = events_.on(event_name, [context, handler](CefRefPtr<CefV8Value> event_data) {
+                CEF_REQUIRE_RENDERER_THREAD();
+
+                CefV8ValueList args;
+                args.push_back(event_data);
+                handler->ExecuteFunctionWithContext(context, nullptr, args);
+            });
+
+            // Forward to browser side
+            CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create(config_.js_event_on_function);
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            args->SetString(0, event_name);
+            args->SetInt(1, id_render_side);
+            frame->SendProcessMessage(PID_BROWSER, message);
+
+            return id_render_side;
         }
 
-        // Retrieves the existing ID value associated with the specified |context|.
-        // If |remove| is true the context will also be removed from the map.
-        int GetIDForContext(CefRefPtr<CefV8Context> context, bool remove = false) {
+        void OffEvent(CefRefPtr<CefBrowser> browser,
+                      CefRefPtr<CefFrame> frame,
+                      const std::string& event_name,
+                      const int id_render_side) {
             CEF_REQUIRE_RENDERER_THREAD();
+            events_.off(event_name, id_render_side);
 
-            ContextMap::iterator it = context_map_.begin();
-            for (; it != context_map_.end(); ++it) {
-                if (it->second->IsSame(context)) {
-                    int context_id = it->first;
-                    if (remove) {
-                        context_map_.erase(it);
-                    }
-                    return context_id;
-                }
-            }
-
-            return kReservedId;
+            // Forward to browser side
+            CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create(config_.js_event_off_function);
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            args->SetString(0, event_name);
+            args->SetInt(1, id_render_side);
+            frame->SendProcessMessage(PID_BROWSER, message);
         }
 
-        CefRefPtr<CefV8Context> GetContextByID(int context_id) {
+        void OffEvent(CefRefPtr<CefBrowser> browser,
+                      CefRefPtr<CefFrame> frame,
+                      const int id_render_side) {
             CEF_REQUIRE_RENDERER_THREAD();
+            events_.off(id_render_side);
 
-            ContextMap::const_iterator it = context_map_.find(context_id);
-            if (it != context_map_.end()) {
-                return it->second;
-            }
-            return nullptr;
+            CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create(config_.js_event_off_function);
+            CefRefPtr<CefListValue> args = message->GetArgumentList();
+            args->SetInt(0, id_render_side);
+            frame->SendProcessMessage(PID_BROWSER, message);
         }
 
-        int RegisterListener(const std::string& event_name, CefRefPtr<CefV8Value> handler) {
-            CEF_REQUIRE_RENDERER_THREAD();
-
-            const int context_id = GetIDForContext(CefV8Context::GetCurrentContext());
-            const int listener_id = listener_id_generator_.GetNextId();
-            listener_map_.emplace(listener_id, EventListener{ handler, listener_id, context_id });
-
-            return listener_id;
-        }
-
-        void UnregisterListener(const std::string& event_name,
-            int listener_id) {
-            CEF_REQUIRE_RENDERER_THREAD();
-
-            if (listener_map_.count(event_name) && listener_map_[event_name].count(listener_id)) {
-                listener_map_[event_name].erase(listener_id);
-            }
-        }
-
-        void EmitEvent(CefRefPtr<CefFrame> frame,
+        void EmitEvent(CefRefPtr<CefBrowser> browser,
+                       CefRefPtr<CefFrame> frame,
+                       const bool fromBrowserSide,
                        const std::string& event_name,
                        CefRefPtr<CefV8Value> data) {
             CEF_REQUIRE_RENDERER_THREAD();
+
+            events_.emit(event_name, data);
+
+            if (fromBrowserSide)
+                return;
 
             // Convert V8 value to JSON string.
             std::string event_data;
@@ -338,73 +295,16 @@ namespace {
                 }
             }
 
-            // Trigger event on render side.
-            TriggerEvent(event_name, data);
-
-            // Send event to browser process.
-            CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create(kEventMessageName);
+            // Forward to browser side
+            CefRefPtr<CefProcessMessage> message = CefProcessMessage::Create(config_.js_event_emit_function);
             CefRefPtr<CefListValue> args = message->GetArgumentList();
             args->SetString(0, event_name);
             args->SetString(1, event_data);
             frame->SendProcessMessage(PID_BROWSER, message);
         }
 
-        void TriggerEvent(const std::string& event_name, CefRefPtr<CefV8Value> event_data) {
-            CEF_REQUIRE_RENDERER_THREAD();
-
-            if (!listener_map_.count(event_name)) {
-                return;
-            }
-
-            // Find all listeners for this event.
-            for (auto& [listener_id, listener] : listener_map_[event_name]) {
-                CefRefPtr<CefV8Context> context = GetContextForListener(listener.context_id);
-                if (context && listener.handler) {
-                    CefV8ValueList args;
-                    args.push_back(event_data);
-                    listener.handler->ExecuteFunctionWithContext(context, nullptr, args);
-                }
-            }
-
-        }
-
-        CefRefPtr<CefV8Context> GetContextForListener(const int context_id) {
-            if (auto find = context_map_.find(context_id); find != context_map_.cend())
-                return find->second;
-            return nullptr;
-        }
-
-        void RemoveListenersForContext(int context_id) {
-            CEF_REQUIRE_RENDERER_THREAD();
-
-            for (auto& [event_name, listenerMap] : listener_map_)
-            {
-                for (auto it = listenerMap.begin(); it != listenerMap.end();)
-                {
-                    if (it->second.context_id == context_id)
-                        it = listenerMap.erase(it);
-                    else
-                        ++it;
-                }
-            }
-        }
-
         const CefEventRouterConfig config_;
-
-        IdGenerator<int> context_id_generator_;
-        IdGenerator<int> listener_id_generator_;
-
-        // Map of context ID to CefV8Context for existing contexts. An entry is added
-        // when a bound function is executed for the first time in the context and
-        // removed when the context is released.
-        using ContextMap = std::map<int, CefRefPtr<CefV8Context>>;
-        ContextMap context_map_;
-
-        // Map of listener ID to EventListener.
-        using ListenerMap = std::map<int, EventListener>;
-        // Map of eventName to ListenerMap.
-        using EventListenerMap = std::map<std::string, ListenerMap>;
-        EventListenerMap listener_map_;
+        event::Events<> events_;
     };
 
 }  // namespace

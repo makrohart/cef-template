@@ -11,7 +11,6 @@
 #include "include/cef_dom.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/wrapper/cef_message_router.h"
-#include "progress_message_router_render_side.h"
 #include "replace_me/renderer/event_router_render_side.h"
 
 namespace client::renderer {
@@ -37,9 +36,8 @@ namespace client::renderer {
         }
 
         // Create the renderer-side router for query handling.
-        // message_routers_.insert(CefMessageRouterRenderSide::Create(CefMessageRouterConfig{}));
-        message_routers_.insert(ProgressMessageRouterRendererSide::Create(CefMessageRouterConfig{}));
-        message_routers_.insert(EventRouterRenderSide::Create(CefEventRouterConfig{}));
+        message_routers_.insert(CefMessageRouterRendererSide::Create(CefMessageRouterConfig()));
+        message_routers_.insert(EventRouterRenderSide::Create(CefEventRouterConfig()));
     }
     void ClientAppRenderDelegate::OnContextCreated(CefRefPtr<ClientAppRenderer> app, CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefV8Context> context)
     {

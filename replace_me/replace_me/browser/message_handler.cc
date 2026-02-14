@@ -8,11 +8,33 @@
 #include "include/cef_values.h"
 #include "include/cef_parser.h"
 #include "include/cef_dialog_handler.h"
-#include "replace_me/services/setting_service/SettingService.h"
-#include "replace_me/services/MessageTypes.h"
+#include "xpack.h"
+#include "json.h"
+#include "replace_me/services/test_service.h"
 
 namespace client::message_handler
 {
+    struct CefQueryMessage
+    {
+        std::string action;
+        std::string request;
+        XPACK(O(action, request));
+    };
+
+    struct CefFileDialogRequest
+    {
+        std::string title;
+        std::string defaultPath;
+        int mode;
+        XPACK(O(title, defaultPath, mode));
+    };
+
+    struct CefFileDialogResponse
+    {
+        std::string selectedPath;
+        XPACK(O(selectedPath));
+    };
+
     bool MessageHandler::OnQuery(CefRefPtr<CefBrowser> browser,
         CefRefPtr<CefFrame> frame,
         int64_t query_id,
@@ -22,7 +44,7 @@ namespace client::message_handler
     {
         CEF_REQUIRE_UI_THREAD();
 
-        replace_me::json::CefQueryMessage queryMessage;
+        CefQueryMessage queryMessage;
         xpack::json::decode(request.ToString(), queryMessage);
 
         // Handle file dialog requests asynchronously
@@ -51,12 +73,12 @@ namespace client::message_handler
         std::string errorMsg;
         int ret = 0;
 
-        replace_me::json::CefQueryMessage queryMessage;
+        CefQueryMessage queryMessage;
         xpack::json::decode(request.ToString(), queryMessage);
 
-        if (queryMessage.action.find("setting:") != std::string::npos)
+        if (queryMessage.action.find("test:") != std::string::npos)
         {
-            ret = replace_me::services::SettingService::getInstance().onQuery(queryMessage.action, queryMessage.request, resp, errorMsg);
+            ret = test::TestService::getInstance().onQuery(queryMessage.action, queryMessage.request, resp, errorMsg);
             response = std::move(resp);
             error_message = std::move(errorMsg);
             return ret;
@@ -71,7 +93,7 @@ namespace client::message_handler
     {
         CEF_REQUIRE_UI_THREAD();
         
-        replace_me::json::CefFileDialogRequest req;
+        CefFileDialogRequest req;
         if (!request.empty())
         {
             xpack::json::decode(request, req);
@@ -91,7 +113,7 @@ namespace client::message_handler
             {
                 CEF_REQUIRE_UI_THREAD();
 
-                replace_me::json::CefFileDialogResponse resp;
+                CefFileDialogResponse resp;
                 if (!file_paths.empty())
                 {
                     resp.selectedPath = file_paths[0];

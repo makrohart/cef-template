@@ -133,7 +133,7 @@ class ClientHandlerBase : public CefClient,
 
   // Handles the browser side of query routing. The renderer side is handled
   // in client_renderer.cc.
-  CefRefPtr<CefMessageRouterBrowserSide> message_router_;
+  std::set<CefRefPtr<CefMessageRouterBrowserSide>> message_routers_;
 
   // Set of Handlers registered with the message router for browser.
   std::set<std::shared_ptr<CefMessageRouterBrowserSide::Handler>> browser_message_handler_set_;

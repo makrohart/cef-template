@@ -2,12 +2,8 @@
 
 #include <string>
 
-namespace replace_me::services
+class IService
 {
-    class IService
-    {
-        public:
-        
-        virtual int onQuery(const std::string& action, const std::string& request, std::string& response, std::string& message) = 0;
-    };
-}
+public:
+    virtual int onQuery(const std::string& action, const std::string& request, std::string& response, std::string& message) = 0;
+};

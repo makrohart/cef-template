@@ -91,20 +91,31 @@ namespace event
             return onImpl(eventName, typename Traits::function_type(std::forward<F>(callback)));
         }
 
-        void off(const std::string& eventName, T&& id) {
+        void off(const std::string& eventName, const T& id) {
             auto it = callbacks_.find(eventName);
             if (it == callbacks_.cend()) return;
-            if (it->second.count(std::forward<T>(id)))
-                it->second.erase(std::forward<T>(id));
+            if (it->second.count(id))
+                it->second.erase(id);
+        }
+
+        void off(const T& id) {
+            for (auto& [eventName, callbackMap] : callbacks_)
+            {
+                if (callbackMap.count(id))
+                    callbackMap.erase(id);
+            }
         }
 
         template<typename... Args>
-        void emit(const std::string& eventName, Args&&... args) {
+        void emit(const std::string& eventName, Args... args) {
             auto it = callbacks_.find(eventName);
             if (it == callbacks_.cend()) return;
 
             // std::decay for T, T&, T&&
             using TargetImpl = ImplType<std::decay_t<Args>...>;
+
+            if (it->second.empty())
+                return;
 
             for (auto& [id, callback] : it->second) {
                 auto callbackImpl = std::dynamic_pointer_cast<TargetImpl>(callback);

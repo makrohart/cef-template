@@ -8,6 +8,7 @@
 #include "replace_me/browser/main_context.h"
 #include "replace_me/browser/message_handler.h"
 #include "replace_me/browser/root_window_manager.h"
+#include "replace_me/browser/event_router_browser_side.h"
 #include "replace_me/common/client_switches.h"
 
 namespace client {
@@ -34,8 +35,16 @@ bool ClientHandlerBase::OnProcessMessageReceived(
     CefProcessId source_process,
     CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
-  return message_router_->OnProcessMessageReceived(browser, frame,
-                                                   source_process, message);
+  
+  // Try message router first.
+  for (auto& message_router : message_routers_)
+  {
+      if (message_router->OnProcessMessageReceived(browser, frame, source_process, message)) {
+          return true;
+      }
+  }
+
+  return false;
 }
 
 bool ClientHandlerBase::OnSetFocus(CefRefPtr<CefBrowser> browser,
@@ -48,16 +57,21 @@ void ClientHandlerBase::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
 
   browser_count_++;
 
-  if (!message_router_) {
-    // Create the browser-side router for query handling.
-    CefMessageRouterConfig config;
-    message_router_ = CefMessageRouterBrowserSide::Create(config);
+  message_routers_.clear();
+  
+  // Create the browser-side router for query handling.
+  CefMessageRouterConfig config;
+  CefRefPtr<CefMessageRouterBrowserSide> message_router = CefMessageRouterBrowserSide::Create(config);
+  // Register handlers with the router.
+  auto message_handler = std::make_shared<client::message_handler::MessageHandler>();
+  browser_message_handler_set_.insert(message_handler);
+  message_router->AddHandler(message_handler.get(), false);
+  message_routers_.insert(message_router);
 
-    // Register handlers with the router.
-    auto message_handler = std::make_shared<client::message_handler::MessageHandler>();
-    browser_message_handler_set_.insert(message_handler);
-    message_router_->AddHandler(message_handler.get(), false);
-  }
+  // Create the browser-side router for query handling.
+  //CefEventRouterConfig config;
+  message_router = EventRouterBrowserSide::Create(/*config*/);
+  message_routers_.insert(message_router);
 
   // No need to set up resource provider for file:// protocol
 
@@ -73,10 +87,12 @@ void ClientHandlerBase::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   if (--browser_count_ == 0) {
     // Remove and delete message router handlers.
     for (auto& message_handler : browser_message_handler_set_) {
-      message_router_->RemoveHandler(message_handler.get());
+        for (auto& message_router : message_routers_) {
+            message_router->RemoveHandler(message_handler.get());
+        }
     }
     browser_message_handler_set_.clear();
-    message_router_ = nullptr;
+    message_routers_.clear();
   }
 
   if (track_as_other_browser_) {
@@ -102,7 +118,9 @@ bool ClientHandlerBase::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
                                        bool user_gesture,
                                        bool is_redirect) {
   CEF_REQUIRE_UI_THREAD();
-  message_router_->OnBeforeBrowse(browser, frame);
+  for (auto& message_router : message_routers_) {
+      message_router->OnBeforeBrowse(browser, frame);
+  }
   return false;
 }
 
@@ -128,7 +146,9 @@ void ClientHandlerBase::OnRenderProcessTerminated(
     int error_code,
     const CefString& error_string) {
   CEF_REQUIRE_UI_THREAD();
-  message_router_->OnRenderProcessTerminated(browser);
+  for (auto& message_router : message_routers_) {
+      message_router->OnRenderProcessTerminated(browser);
+  }
 }
 
 cef_return_value_t ClientHandlerBase::OnBeforeResourceLoad(

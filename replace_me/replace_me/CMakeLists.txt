@@ -71,22 +71,14 @@ set(REPLACE_ME_BROWSER_BROWSER_SRCS
   )
 source_group(replace_me\\\\browser FILES ${REPLACE_ME_BROWSER_BROWSER_SRCS})
 
-# setting service
-set(REPLACE_ME_SETTING_SERVICE_SRCS
-  services/setting_service/SettingService.cc
-  services/setting_service/SettingService.h
-  )
-source_group(replace_me\\\\services\\\\setting_service FILES ${REPLACE_ME_SETTING_SERVICE_SRCS})
-
 set(REPLACE_ME_SERVICES_BASE_SRCS
-  services/MessageTypes.h
-  services/IService.h
+  services/iservice.h
+  services/test_service.h
   )
 source_group(replace_me\\\\services FILES ${REPLACE_ME_SERVICES_BASE_SRCS})
 
 set(REPLACE_ME_SERVICES_SRCS
   ${REPLACE_ME_SERVICES_BASE_SRCS}
-  ${REPLACE_ME_SETTING_SERVICE_SRCS}
   )
 
 set(REPLACE_ME_BROWSER_SRCS
@@ -114,6 +106,8 @@ set(REPLACE_ME_COMMON_SRCS
   common/progress_message_router_utils.cpp
   common/event.h
   common/event.cpp
+  common/notify.h
+  common/event_notify.h
   )
 source_group(replace_me\\\\common FILES ${REPLACE_ME_COMMON_SRCS})
 
@@ -123,8 +117,6 @@ set(REPLACE_ME_RENDERER_SRCS
   renderer/client_app_renderer.h
   renderer/client_app_renderer_delegate.cc
   renderer/client_app_renderer_delegate.h
-  renderer/progress_message_router_render_side.h
-  renderer/progress_message_router_render_side.cpp
   renderer/event_router_render_side.h
   renderer/event_router_render_side.cc
   )

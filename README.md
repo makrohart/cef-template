@@ -41,7 +41,6 @@ npm run build
         <script type="module" src="/src/main.tsx"></script>
       </body>
     </html>
-
     ```
 
 ## Backend
@@ -49,3 +48,27 @@ npm run build
 * Change folder name from `replace_me` to your project name
 * Replace all `REPLACE_ME` and `REPLACE_ME_` with your project name
 * Replace all `replace_me` and `replace_me_` with your project name
+
+## Bridge
+
+```
+bridge.invoke
+bridge.on
+bridge.emit
+// Or
+const {invoke, on, emit} = useBridge();
+
+// To test, open dev-tool and input in console
+bridge.invoke('test:invoke', {info: "hello test:invoke"}, (error, result) => { console.log(result) });
+bridge.invoke('test:invokeError', {info: "hello test:invokeError", error: 1}, (error, result) => { console.log(result) });
+
+const off = bridge.on('test:onEvent', (data) => { console.log(data);});
+bridge.emit('test:onEvent', {info: "hello test:onEvent"})
+off();
+
+// To test event triggered on native side and vice versa.
+bridge.on("test:onEvent", (data)=>{console.log(data)});
+bridge.invoke("test:emitEvent", {eventName: "test:onEvent", data: "hello test:onEvent"});
+
+
+```

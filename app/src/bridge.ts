@@ -24,6 +24,8 @@ declare global {
     cefEventOff?: (eventName: string, listenerId: number) => void;
     /** 触发事件 */
     cefEventEmit?: (eventName: string, data: any) => void;
+    /** 开发环境：便于在 DevTools Console 中调试，如 bridge.invoke / bridge.on / bridge.emit */
+    bridge?: Bridge;
   }
 }
 
@@ -40,15 +42,16 @@ export class Bridge {
    */
   invoke(
     ipcName: string,
-    params: Record<string, any> = {},
-    callback?: (error: Error | null, result?: any) => void
+    params: any,
+    callback?: (errorCode: number | null, errorMessage: string) => void
   ): void {
     if (!window.cefQuery) {
-      const error = new Error('CEF bridge is not available. cefQuery is not defined.');
+      const errorMessage = "cefQuery is not defined.";
+      const errorCode = -1;
       if (callback) {
-        callback(error);
+        callback(errorCode, errorMessage);
       } else {
-        console.error(error);
+        console.error(`error [${errorCode}]: ${errorMessage}`);
       }
       return;
     }
@@ -63,8 +66,8 @@ export class Bridge {
         request,
         onSuccess: (response: string) => {
           try {
-            const result = JSON.parse(response);
             if (callback) {
+              const result = JSON.parse(response);
               callback(null, result);
             }
           } catch (error) {
@@ -72,27 +75,26 @@ export class Bridge {
               ? error 
               : new Error('Failed to parse response');
             if (callback) {
-              callback(parseError);
+              callback(-1, parseError.message);
             } else {
-              console.error('Failed to parse CEF response:', parseError);
+              console.error(`error [${-1}]: ${parseError.message}`);
             }
           }
         },
         onFailure: (errorCode: number, errorMessage: string) => {
-          const error = new Error(`CEF IPC error [${errorCode}]: ${errorMessage}`);
           if (callback) {
-            callback(error);
+            callback(errorCode, errorMessage);
           } else {
-            console.error(error);
+            console.error(`error [${-1}]: ${errorMessage}`);
           }
         },
       });
     } catch (error) {
       const err = error instanceof Error ? error : new Error('Unknown error');
       if (callback) {
-        callback(err);
+        callback(-1, err.message);
       } else {
-        console.error('Failed to invoke CEF IPC:', err);
+        console.error(`error [${-1}]: ${err.message}`);
       }
     }
   }
@@ -108,7 +110,9 @@ export class Bridge {
     handler: (data: any) => void
   ): () => void {
     if (!window.cefEventOn) {
-      console.warn('CEF event bridge is not available. cefEventOn is not defined.');
+      const errorMessage = "cefEventOn is not defined.";
+      const errorCode = -1;
+      console.error(`error [${errorCode}]: ${errorMessage}`);
       return () => {};
     }
 
@@ -123,7 +127,8 @@ export class Bridge {
         }
       };
     } catch (error) {
-      console.error(`Failed to register event listener for "${eventName}":`, error);
+      const err = error instanceof Error ? error : new Error(`Failed to listen event for "${eventName}".`);
+      console.error(`error [${-1}]: ${err.message}`);
       return () => {};
     }
   }
@@ -135,14 +140,17 @@ export class Bridge {
    */
   emit(eventName: string, data: any = {}): void {
     if (!window.cefEventEmit) {
-      console.warn('CEF event bridge is not available. cefEventEmit is not defined.');
+      const errorMessage = "cefEventEmit is not defined.";
+      const errorCode = -1;
+      console.error(`error [${errorCode}]: ${errorMessage}`);
       return;
     }
 
     try {
       window.cefEventEmit(eventName, data);
     } catch (error) {
-      console.error(`Failed to emit event "${eventName}":`, error);
+      const err = error instanceof Error ? error : new Error(`Failed to emit event for "${eventName}".`);
+      console.error(`error [${-1}]: ${err.message}`);
     }
   }
 }
@@ -154,6 +162,11 @@ export const bridge = new Bridge();
 export const invoke = bridge.invoke.bind(bridge);
 export const on = bridge.on.bind(bridge);
 export const emit = bridge.emit.bind(bridge);
+
+// 开发环境下挂到 window，方便在 DevTools Console 里用 bridge.invoke / bridge.on / bridge.emit
+if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+  window.bridge = bridge;
+}
 
 /**
  * React Hook for using Bridge
