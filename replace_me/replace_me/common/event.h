@@ -138,3 +138,4 @@ namespace event
         IdGenerator<T> idGenerator_;
     };
 }
+

@@ -43,3 +43,4 @@
 replace_me/thirdParties/cef_binary_142.0.10+g29548e2+chromium-142.0.7444.135_windows64
 replace_me/thirdParties/cef_binary_142.0.10+g29548e2+chromium-142.0.7444.135_macosarm64
 build
+replace_me/replace_me/.DS_Store

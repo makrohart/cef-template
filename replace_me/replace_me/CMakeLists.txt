@@ -102,8 +102,6 @@ set(REPLACE_ME_COMMON_SRCS
   common/geometry_util.cc
   common/geometry_util.h
   common/resource_util.h
-  common/progress_message_router_utils.h
-  common/progress_message_router_utils.cpp
   common/event.h
   common/event.cpp
   common/notify.h

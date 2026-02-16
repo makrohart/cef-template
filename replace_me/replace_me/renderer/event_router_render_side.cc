@@ -17,8 +17,6 @@
 
 namespace {
 
-    const char kEventMessageName[] = "CEFEventRouterMsg";
-
     // ID value reserved for internal use.
     const int kReservedId = 0;
 
@@ -321,3 +319,4 @@ CefRefPtr<CefMessageRouterRendererSide> EventRouterRenderSide::Create(const CefE
 {
     return new EventRouterRenderSideImpl(config);
 }
+
