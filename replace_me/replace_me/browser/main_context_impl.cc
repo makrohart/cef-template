@@ -154,11 +154,11 @@ std::string MainContextImpl::GetMainURL(
     command_line = command_line_;
   }
 
-#ifdef _DEBUG
-  // Debug mode: use localhost
+#ifndef NDEBUG
+  // Debug mode: use localhost (NDEBUG not defined = Debug build, cross-platform)
   std::string main_url = kDefaultUrl;
 #else
-  // Build dist/index.html path
+  // Release: build dist/index.html path
   std::filesystem::path dist_path(GetAppWorkingDirectory());
   dist_path /= "dist";
   dist_path /= "index.html";

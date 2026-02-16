@@ -198,87 +198,9 @@ void RemoveMenuItem(NSMenu* menu, SEL action_selector) {
 
   auto* main_context = client::MainContext::Get();
 
-  // Configure URL based on build mode
-  std::string initial_url;
-#ifdef DEBUG
-  // Debug mode: use localhost
-  initial_url = "http://localhost:5173/";
-#else
-  // Release mode: use file:// protocol
-  std::filesystem::path dist_path;
-  bool found = false;
-  
-  // First, try to find dist in app bundle Resources (for packaged app)
-  NSBundle* mainBundle = [NSBundle mainBundle];
-  NSString* bundlePath = [mainBundle bundlePath];
-  
-  if ([bundlePath hasSuffix:@".app"]) {
-    // Running from bundle: check Resources/dist/
-    std::string bundle_path_str = [bundlePath UTF8String];
-    std::filesystem::path resources_path(bundle_path_str);
-    resources_path /= "Contents";
-    resources_path /= "Resources";
-    resources_path /= "dist";
-    resources_path /= "index.html";
-    
-    if (std::filesystem::exists(resources_path)) {
-      dist_path = resources_path;
-      found = true;
-    }
-  }
-  
-  // If not found in bundle, search upward from executable (for development)
-  if (!found) {
-    uint32_t pathSize = 0;
-    _NSGetExecutablePath(nullptr, &pathSize);
-    if (pathSize > 0) {
-      std::string exe_path;
-      exe_path.resize(pathSize);
-      _NSGetExecutablePath(const_cast<char*>(exe_path.c_str()), &pathSize);
-      
-      std::filesystem::path current_path(exe_path);
-      
-      // If running from a bundle, start from bundle's parent directory
-      if ([bundlePath hasSuffix:@".app"]) {
-        // Go up to bundle directory, then continue searching
-        current_path = current_path.parent_path().parent_path().parent_path();
-      } else {
-        // Not in bundle, start from executable's parent directory
-        current_path = current_path.parent_path();
-      }
-      
-      // Search upward for project root (directory containing dist/)
-      std::filesystem::path search_path = current_path;
-      // Limit search depth to avoid infinite loops
-      for (int depth = 0; depth < 10 && !search_path.empty() && search_path != search_path.root_path(); ++depth) {
-        std::filesystem::path dist_check = search_path / "dist" / "index.html";
-        if (std::filesystem::exists(dist_check)) {
-          dist_path = dist_check;
-          found = true;
-          break;
-        }
-        search_path = search_path.parent_path();
-      }
-    }
-  }
-  
-  // Convert to file:// URL
-  if (found) {
-    std::string file_path = dist_path.string();
-    // Replace backslashes with forward slashes for URL (though macOS uses forward slashes)
-    std::replace(file_path.begin(), file_path.end(), '\\', '/');
-    // Add file:// prefix (use three slashes like Windows version)
-    initial_url = "file:///" + file_path;
-  } else {
-    // Fallback: use localhost if dist not found
-    initial_url = "http://localhost:5173/";
-  }
-#endif
-
   auto window_config = std::make_unique<client::RootWindowConfig>();
   window_config->with_osr = with_osr_;
   window_config->with_controls = false;  // 隐藏URL栏等浏览器界面，只显示HTML内容
-  window_config->url = initial_url;
 
   // Create the first window.
   main_context->GetRootWindowManager()->CreateRootWindow(
